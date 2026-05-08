@@ -1,0 +1,13 @@
+.component-content {
+  padding: 24px;
+}
+.component-content h2 {
+  margin: 0 0 16px;
+  font-size: 24px;
+  color: #1e293b;
+  font-weight: 600;
+}
+.component-content p {
+  color: #64748b;
+  font-size: 14px;
+}
