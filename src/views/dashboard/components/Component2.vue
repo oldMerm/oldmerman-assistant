@@ -1,163 +1,250 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { httpInstance, type Response } from '@/utils/http'
+import Toast from '@/utils/toast/Toast.vue'
 
-interface Model {
-  id: string
-  name: string
+// 分组信息（对应后端 ModelsGroup）
+interface ModelsGroup {
+  id?: number
+  group_uuid: string
+  group_name?: string
+  group_attr?: string
+  created_at?: string
+  api_key?: string
+  base_url?: string
 }
 
-interface ModelCategory {
-  id: string
-  name: string
-  models: Model[]
+// 分组渲染信息（对应后端 ModelsGroupRender，用于下拉框）
+interface ModelsGroupRender {
+  group_uuid: string
+  group_name?: string
+  group_attr?: string
 }
 
-interface Provider {
-  id: string
-  name: string
-  logo?: string
-  apiKey: string
-  modelCount: number
-  createdAt: string
-  categories: ModelCategory[]
+// 模型渲染参数（对应后端 ModelRenderParam）
+interface ModelRenderParam {
+  model_id?: number | null
+  model_name?: string | null
+  type_id?: number | null
+  type_name?: string | null
 }
 
-const getLogoDisplay = (provider: Provider) => {
-  if (provider.logo) {
-    return { type: 'img' as const, src: provider.logo }
+// 分类后的模型组
+interface CategoryGroup {
+  type_id: number
+  type_name: string
+  models: ModelRenderParam[]
+}
+
+/**
+ * 获取Logo显示方式
+ * - 若group_attr中包含logo_url则显示图片
+ * - 否则显示首字母大写
+ */
+const getLogoDisplay = (group: ModelsGroupRender) => {
+  if (group.group_attr) {
+    try {
+      const attr = JSON.parse(group.group_attr)
+      if (attr.logo_url) {
+        return { type: 'img' as const, src: attr.logo_url }
+      }
+    } catch {}
   }
-  return { type: 'text' as const, text: provider.name[0] }
+  return { type: 'text' as const, text: group.group_name?.[0]?.toUpperCase() || '?' }
 }
 
-const mockProviders: Provider[] = [
-  {
-    id: 'openai',
-    name: 'OpenAI',
-    apiKey: 'sk-**** **** **** ****',
-    modelCount: 12,
-    createdAt: '2024-01-15',
-    categories: [
-      {
-        id: 'chat',
-        name: '聊天模型',
-        models: [
-          { id: 'gpt-4.5', name: 'gpt-4.5' },
-          { id: 'gpt-4-turbo', name: 'gpt-4-turbo' },
-          { id: 'gpt-4', name: 'gpt-4' },
-          { id: 'gpt-3.5-turbo', name: 'gpt-3.5-turbo' },
-          { id: 'o1', name: 'o1' },
-          { id: 'o1-mini', name: 'o1-mini' },
-          { id: 'o1-preview', name: 'o1-preview' },
-          { id: 'o3', name: 'o3' },
-          { id: 'o3-mini', name: 'o3-mini' },
-          { id: 'o4-mini', name: 'o4-mini' }
-        ]
-      },
-      {
-        id: 'image',
-        name: '文生图',
-        models: [
-          { id: 'dall-e-3', name: 'dall-e-3' },
-          { id: 'dall-e-2', name: 'dall-e-2' }
-        ]
-      },
-      {
-        id: 'embedding',
-        name: '嵌入模型',
-        models: [
-          { id: 'text-embedding-3-large', name: 'text-embedding-3-large' },
-          { id: 'text-embedding-3-small', name: 'text-embedding-3-small' },
-          { id: 'text-embedding-ada-002', name: 'text-embedding-ada-002' }
-        ]
+// 状态定义
+const groupList = ref<ModelsGroupRender[]>([])         // 下拉框分组列表
+const currentGroup = ref<ModelsGroup | null>(null)     // 当前选中的分组
+const categories = ref<CategoryGroup[]>([])           // 分类后的模型列表
+const showDropdown = ref(false)                       // 下拉框显示状态
+const isScrolling = ref(false)                        // 滚动状态（控制tips显示）
+const scrollTimeout = ref<number | null>(null)        // 滚动防抖定时器
+const containerRef = ref<HTMLElement | null>(null)    // 容器引用
+const isLoading = ref(false)                          // 加载状态
+
+// Toast 状态
+const toastRef = ref()
+const toastMsg = ref('')
+const toastType = ref<'success' | 'error'>('error')
+
+/**
+ * 显示Toast提示
+ * @param message 提示信息
+ * @param type 提示类型
+ */
+const showToast = (message: string, type: 'success' | 'error' = 'error') => {
+  toastMsg.value = message
+  toastType.value = type
+  toastRef.value?.show()
+}
+
+/**
+ * 格式化API Key显示，隐藏部分字符
+ * 保留前几位，末尾加5个星号
+ */
+const formatApiKey = (apiKey?: string | null) => {
+  if (!apiKey) return '-'
+  if (apiKey.length <= 8) return apiKey
+  const visibleCount = Math.floor(apiKey.length * 0.3)
+  return apiKey.slice(0, visibleCount) + '*****'
+}
+
+const currentCategories = computed(() => categories.value)
+
+// 当前分组的Logo显示（用于顶部显示）
+const currentLogoDisplay = computed(() => {
+  if (currentGroup.value?.group_attr) {
+    try {
+      const attr = JSON.parse(currentGroup.value.group_attr)
+      if (attr.logo_url) {
+        return { type: 'img' as const, src: attr.logo_url }
       }
-    ]
-  },
-  {
-    id: 'anthropic',
-    name: 'Anthropic',
-    apiKey: 'sk-ant-**** **** ****',
-    modelCount: 8,
-    createdAt: '2024-02-20',
-    categories: [
-      {
-        id: 'chat',
-        name: '聊天模型',
-        models: [
-          { id: 'claude-sonnet-4-20250514', name: 'claude-sonnet-4-20250514' },
-          { id: 'claude-3-5-sonnet-20241022', name: 'claude-3-5-sonnet-20241022' },
-          { id: 'claude-3-5-sonnet-20240620', name: 'claude-3-5-sonnet-20240620' },
-          { id: 'claude-3-opus-20240229', name: 'claude-3-opus-20240229' },
-          { id: 'claude-3-sonnet-20240229', name: 'claude-3-sonnet-20240229' },
-          { id: 'claude-3-haiku-20240307', name: 'claude-3-haiku-20240307' }
-        ]
-      },
-      {
-        id: 'embedding',
-        name: '嵌入模型',
-        models: [
-          { id: 'claude-embedding-v1', name: 'claude-embedding-v1' }
-        ]
-      }
-    ]
-  },
-  {
-    id: 'deepseek',
-    name: 'DeepSeek',
-    logo: '/image/deepseek.svg',
-    apiKey: 'sk-deepseek-****',
-    modelCount: 6,
-    createdAt: '2024-03-10',
-    categories: [
-      {
-        id: 'chat',
-        name: '聊天模型',
-        models: [
-          { id: 'deepseek-chat', name: 'deepseek-chat' },
-          { id: 'deepseek-coder', name: 'deepseek-coder' },
-          { id: 'deepseek-pro', name: 'deepseek-pro' },
-          { id: 'deepseek-distill', name: 'deepseek-distill' }
-        ]
-      },
-      {
-        id: 'reasoning',
-        name: '推理模型',
-        models: [
-          { id: 'deepseek-reasoner', name: 'deepseek-reasoner' },
-          { id: 'deepseek-r1', name: 'deepseek-r1' }
-        ]
-      }
-    ]
+    } catch {}
   }
-]
+  return { type: 'text' as const, text: currentGroup.value?.group_name?.[0]?.toUpperCase() || '?' }
+})
 
-const providers = ref<Provider[]>(mockProviders)
-const selectedProvider = ref<Provider>(mockProviders[0]!)
-const showDropdown = ref(false)
-const isScrolling = ref(false)
-const scrollTimeout = ref<number | null>(null)
-const containerRef = ref<HTMLElement | null>(null)
+/**
+ * 获取默认分组并渲染
+ * 首次加载时调用，不传group_uuid获取默认分组
+ */
+const fetchDefaultGroup = async () => {
+  try {
+    const res = await httpInstance.get<any, Response>('/model_group')
+    if (res.code !== 200) {
+      showToast(res.message || '获取分组失败!')
+      return
+    }
+    if (res.data) {
+      currentGroup.value = res.data
+      if (res.data.group_uuid) {
+        await fetchGroupModels(res.data.group_uuid)
+      }
+    }
+  } catch (error) {
+    showToast(`获取分组失败:${error}!`)
+  }
+}
 
-const currentCategories = computed(() => selectedProvider.value?.categories ?? [])
+/**
+ * 获取指定分组的模型列表并按分类渲染
+ * @param groupUuid 分组的uuid
+ */
+const fetchGroupModels = async (groupUuid: string) => {
+  try {
+    isLoading.value = true
+    const res = await httpInstance.get<any, Response>(`/model/render?group_uuid=${groupUuid}`)
+    if (res.code !== 200) {
+      showToast(res.message || '获取模型列表失败!')
+      return
+    }
+    if (res.data) {
+      const modelList: ModelRenderParam[] = res.data
+      const grouped = groupModelsByType(modelList)
+      categories.value = grouped
+    }
+  } catch (error) {
+    showToast(`获取模型列表失败:${error}!`)
+  } finally {
+    isLoading.value = false
+  }
+}
 
-const toggleDropdown = () => {
+/**
+ * 将模型列表按type_id分类
+ * @param models 模型列表
+ * @returns 分类后的模型组
+ */
+const groupModelsByType = (models: ModelRenderParam[]): CategoryGroup[] => {
+  const map = new Map<number, CategoryGroup>()
+  for (const model of models) {
+    const typeId = model.type_id
+    if (typeId === null || typeId === undefined) continue
+    const id = Number(typeId)
+    if (!map.has(id)) {
+      map.set(id, {
+        type_id: id,
+        type_name: model.type_name || '未命名分类',
+        models: []
+      })
+    }
+    map.get(id)!.models.push(model)
+  }
+  return Array.from(map.values())
+}
+
+/**
+ * 获取所有分组列表（用于下拉框）
+ */
+const fetchAllGroups = async () => {
+  try {
+    const res = await httpInstance.get<any, Response>('/model_group/render')
+    if (res.code !== 200) {
+      showToast(res.message || '获取分组列表失败!')
+      return
+    }
+    if (res.data) {
+      groupList.value = res.data
+    }
+  } catch (error) {
+    showToast(`获取分组列表失败:${error}!`)
+  }
+}
+
+// 组件挂载时获取默认分组
+onMounted(async () => {
+  await fetchDefaultGroup()
+})
+
+/**
+ * 切换下拉框显示
+ * 首次打开时加载所有分组列表
+ */
+const toggleDropdown = async () => {
+  if (!showDropdown.value && groupList.value.length === 0) {
+    await fetchAllGroups()
+  }
   showDropdown.value = !showDropdown.value
 }
 
-const selectProvider = (provider: Provider) => {
-  selectedProvider.value = provider
+/**
+ * 选择分组并渲染对应的模型
+ * @param group 选中的分组
+ */
+const selectGroup = async (group: ModelsGroupRender) => {
   showDropdown.value = false
-}
-
-const deleteModel = (categoryId: string, modelId: string) => {
-  const category = selectedProvider.value?.categories.find(c => c.id === categoryId)
-  if (category) {
-    category.models = category.models.filter(m => m.id !== modelId)
-    selectedProvider.value!.modelCount = selectedProvider.value!.categories.reduce(
-      (sum, cat) => sum + cat.models.length, 0
-    )
+  try {
+    // 获取该分组的完整信息（包含api_key、base_url等）
+    const res = await httpInstance.get<any, Response>(`/model_group?group_uuid=${group.group_uuid}`)
+    if (res.code !== 200) {
+      showToast(res.message || '获取分组信息失败!')
+      return
+    }
+    if (res.data) {
+      currentGroup.value = res.data
+    }
+    // 获取该分组的模型列表
+    await fetchGroupModels(group.group_uuid)
+  } catch (error) {
+    showToast(`选择分组失败:${error}!`)
   }
 }
 
+/**
+ * 删除模型（本地状态更新，后端需另外处理）
+ * @param typeId 分类ID
+ * @param modelId 模型ID
+ */
+const deleteModel = (typeId: number, modelId: number | null) => {
+  if (modelId === null || modelId === undefined) return
+  const category = categories.value.find(c => c.type_id === typeId)
+  if (category) {
+    category.models = category.models.filter(m => m.model_id !== modelId)
+  }
+}
+
+// 处理滚动事件（控制footer-tips显示）
 const handleScroll = () => {
   isScrolling.value = true
   if (scrollTimeout.value) {
@@ -171,96 +258,100 @@ const handleScroll = () => {
 
 <template>
   <div class="component2-container" ref="containerRef" @scroll="handleScroll">
-    <div class="provider-section">
-      <div class="provider-left">
-        <div class="provider-select-wrapper">
-          <div class="provider-select" @click="toggleDropdown">
-            <div class="provider-current">
-              <div class="provider-logo" :class="{ 'has-img': getLogoDisplay(selectedProvider).type === 'img' }">
-                <img v-if="getLogoDisplay(selectedProvider).type === 'img'" :src="getLogoDisplay(selectedProvider).src" :alt="selectedProvider.name"/>
-                <span v-else>{{ getLogoDisplay(selectedProvider).text }}</span>
-              </div>
-              <div class="provider-basic-info">
-                <div class="provider-name">{{ selectedProvider.name }}</div>
-                <span class="select-arrow">
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-                    <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                  </svg>
-                </span>
-              </div>
-            </div>
-          </div>
-          <Transition name="dropdown">
-            <div v-if="showDropdown" class="provider-dropdown">
-              <div 
-                v-for="provider in providers" 
-                :key="provider.id"
-                class="provider-option"
-                :class="{ active: provider.id === selectedProvider.id }"
-                @click.stop="selectProvider(provider)"
-              >
-                <div class="provider-logo" :class="{ 'has-img': getLogoDisplay(provider).type === 'img' }">
-                  <img v-if="getLogoDisplay(provider).type === 'img'" :src="getLogoDisplay(provider).src" :alt="provider.name"/>
-                  <span v-else>{{ getLogoDisplay(provider).text }}</span>
+    <div v-if="isLoading" class="loading-state">加载中...</div>
+    <template v-else>
+      <div class="provider-section">
+        <div class="provider-left">
+          <div class="provider-select-wrapper">
+            <div class="provider-select" @click="toggleDropdown">
+              <div class="provider-current">
+                <div class="provider-logo" :class="{ 'has-img': currentLogoDisplay.type === 'img' }">
+                  <img v-if="currentLogoDisplay.type === 'img'" :src="currentLogoDisplay.src" :alt="currentGroup?.group_name"/>
+                  <span v-else>{{ currentLogoDisplay.text }}</span>
                 </div>
-                <div class="provider-name">{{ provider.name }}</div>
-              </div>
-              <div class="provider-option add-group">
-                + 添加提供商
+                <div class="provider-basic-info">
+                  <div class="provider-name">{{ currentGroup?.group_name || '加载中...' }}</div>
+                  <span class="select-arrow">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                      <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                    </svg>
+                  </span>
+                </div>
               </div>
             </div>
-          </Transition>
-        </div>
-
-        <div class="provider-detail">
-          <div class="detail-row">
-            <span class="detail-label">默认API-Key:</span>
-            <span class="detail-value">{{ selectedProvider.apiKey }}</span>
+            <Transition name="dropdown">
+              <div v-if="showDropdown" class="provider-dropdown">
+                <div 
+                  v-for="group in groupList" 
+                  :key="group.group_uuid"
+                  class="provider-option"
+                  :class="{ active: group.group_uuid === currentGroup?.group_uuid }"
+                  @click.stop="selectGroup(group)"
+                >
+                  <div class="provider-logo" :class="{ 'has-img': getLogoDisplay(group).type === 'img' }">
+                    <img v-if="getLogoDisplay(group).type === 'img'" :src="getLogoDisplay(group).src" :alt="group.group_name"/>
+                    <span v-else>{{ getLogoDisplay(group).text }}</span>
+                  </div>
+                  <div class="provider-name">{{ group.group_name }}</div>
+                </div>
+                <div class="provider-option add-group">
+                  + 添加提供商
+                </div>
+              </div>
+            </Transition>
           </div>
-          <div class="detail-row">
-            <span class="detail-label">模型总数:</span>
-            <span class="detail-value">{{ selectedProvider.modelCount }}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">创建时间:</span>
-            <span class="detail-value">{{ selectedProvider.createdAt }}</span>
-          </div>
-        </div>
-      </div>
 
-      <div class="add-model-btn">
-        <span>+ 添加模型</span>
-      </div>
-    </div>
-
-    <div class="categories-grid">
-      <div 
-        v-for="category in currentCategories" 
-        :key="category.id"
-        class="category-card"
-      >
-        <div class="category-header">{{ category.name }}</div>
-        <div class="model-list">
-          <div class="model-column" v-for="col in 2" :key="col">
-            <div 
-              v-for="(model, idx) in category.models.slice((col-1)*5, col*5)" 
-              :key="model.id"
-              class="model-item"
-            >
-              <span class="model-name">{{ model.name }}</span>
-              <span class="model-delete" @click="deleteModel(category.id, model.id)">×</span>
+          <div class="provider-detail">
+            <div class="detail-row">
+              <span class="detail-label">默认API-Key:</span>
+              <span class="detail-value">{{ formatApiKey(currentGroup?.api_key) }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Base URL:</span>
+              <span class="detail-value">{{ currentGroup?.base_url || '-' }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">创建时间:</span>
+              <span class="detail-value">{{ currentGroup?.created_at || '-' }}</span>
             </div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <Transition name="fade">
-      <div v-if="!isScrolling" class="footer-tips">
-        点击模型名称后的×可删除该模型
+        <div class="add-model-btn">
+          <span>+ 添加模型</span>
+        </div>
       </div>
-    </Transition>
+
+      <div class="categories-grid">
+        <div 
+          v-for="category in currentCategories" 
+          :key="category.type_id"
+          class="category-card"
+        >
+          <div class="category-header">{{ category.type_name }}</div>
+          <div class="model-list">
+            <div class="model-column" v-for="col in 2" :key="col">
+              <div 
+                v-for="(model, idx) in category.models.slice((col-1)*5, col*5)" 
+                :key="model.model_id ?? idx"
+                class="model-item"
+              >
+                <span class="model-name">{{ model.model_name }}</span>
+                <span class="model-delete" @click="deleteModel(category.type_id, model.model_id ?? null)">×</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <Transition name="fade">
+        <div v-if="!isScrolling" class="footer-tips">
+          点击模型名称后的×可删除该模型
+        </div>
+      </Transition>
+    </template>
   </div>
+  <Toast ref="toastRef" :message="toastMsg" :type="toastType" :duration="1500" />
 </template>
 
 <style scoped>
@@ -270,6 +361,15 @@ const handleScroll = () => {
   padding: 24px;
   margin: 16px;
   min-height: calc(100% - 32px);
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: #888;
+  font-size: 14px;
 }
 
 .provider-section {
