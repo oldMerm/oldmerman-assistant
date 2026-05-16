@@ -48,7 +48,7 @@ const getLogoDisplay = (group: ModelsGroupRender) => {
       if (attr.logo_url) {
         return { type: 'img' as const, src: attr.logo_url }
       }
-    } catch {}
+    } catch { }
   }
   return { type: 'text' as const, text: group.group_name?.[0]?.toUpperCase() || '?' }
 }
@@ -100,7 +100,7 @@ const currentLogoDisplay = computed(() => {
       if (attr.logo_url) {
         return { type: 'img' as const, src: attr.logo_url }
       }
-    } catch {}
+    } catch { }
   }
   return { type: 'text' as const, text: currentGroup.value?.group_name?.[0]?.toUpperCase() || '?' }
 })
@@ -254,6 +254,25 @@ const handleScroll = () => {
     isScrolling.value = false
   }, 300)
 }
+
+// 弹框
+import Dialog from '@/utils/dialog/Dialog.vue'
+const dialogVisible = ref(false)
+const pendingDelete = ref<{ typeId: number; modelId: number | null } | null>(null)
+
+const openDeleteDialog = (typeId: number, modelId: number | null) => {
+  pendingDelete.value = { typeId, modelId }
+  dialogVisible.value = true
+}
+
+const onConfirmDelete = () => {
+  if (pendingDelete.value) {
+    deleteModel(pendingDelete.value.typeId, pendingDelete.value.modelId)
+    pendingDelete.value = null
+  }
+  dialogVisible.value = false
+}
+
 </script>
 
 <template>
@@ -266,14 +285,15 @@ const handleScroll = () => {
             <div class="provider-select" @click="toggleDropdown">
               <div class="provider-current">
                 <div class="provider-logo" :class="{ 'has-img': currentLogoDisplay.type === 'img' }">
-                  <img v-if="currentLogoDisplay.type === 'img'" :src="currentLogoDisplay.src" :alt="currentGroup?.group_name"/>
+                  <img v-if="currentLogoDisplay.type === 'img'" :src="currentLogoDisplay.src"
+                    :alt="currentGroup?.group_name" />
                   <span v-else>{{ currentLogoDisplay.text }}</span>
                 </div>
                 <div class="provider-basic-info">
                   <div class="provider-name">{{ currentGroup?.group_name || '加载中...' }}</div>
                   <span class="select-arrow">
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-                      <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                      <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.5" fill="none" />
                     </svg>
                   </span>
                 </div>
@@ -281,15 +301,11 @@ const handleScroll = () => {
             </div>
             <Transition name="dropdown">
               <div v-if="showDropdown" class="provider-dropdown">
-                <div 
-                  v-for="group in groupList" 
-                  :key="group.group_uuid"
-                  class="provider-option"
-                  :class="{ active: group.group_uuid === currentGroup?.group_uuid }"
-                  @click.stop="selectGroup(group)"
-                >
+                <div v-for="group in groupList" :key="group.group_uuid" class="provider-option"
+                  :class="{ active: group.group_uuid === currentGroup?.group_uuid }" @click.stop="selectGroup(group)">
                   <div class="provider-logo" :class="{ 'has-img': getLogoDisplay(group).type === 'img' }">
-                    <img v-if="getLogoDisplay(group).type === 'img'" :src="getLogoDisplay(group).src" :alt="group.group_name"/>
+                    <img v-if="getLogoDisplay(group).type === 'img'" :src="getLogoDisplay(group).src"
+                      :alt="group.group_name" />
                     <span v-else>{{ getLogoDisplay(group).text }}</span>
                   </div>
                   <div class="provider-name">{{ group.group_name }}</div>
@@ -323,21 +339,14 @@ const handleScroll = () => {
       </div>
 
       <div class="categories-grid">
-        <div 
-          v-for="category in currentCategories" 
-          :key="category.type_id"
-          class="category-card"
-        >
+        <div v-for="category in currentCategories" :key="category.type_id" class="category-card">
           <div class="category-header">{{ category.type_name }}</div>
           <div class="model-list">
             <div class="model-column" v-for="col in 2" :key="col">
-              <div 
-                v-for="(model, idx) in category.models.slice((col-1)*5, col*5)" 
-                :key="model.model_id ?? idx"
-                class="model-item"
-              >
+              <div v-for="(model, idx) in category.models.slice((col - 1) * 5, col * 5)" :key="model.model_id ?? idx"
+                class="model-item">
                 <span class="model-name">{{ model.model_name }}</span>
-                <span class="model-delete" @click="deleteModel(category.type_id, model.model_id ?? null)">×</span>
+                <span class="model-delete" @click="openDeleteDialog(category.type_id, model.model_id ?? null)">×</span>
               </div>
             </div>
           </div>
@@ -351,6 +360,14 @@ const handleScroll = () => {
       </Transition>
     </template>
   </div>
+
+  <Dialog 
+    v-model:visible="dialogVisible"
+    title="确认删除" 
+    content="确定要执行删除操作吗？此操作无法撤销。" 
+    @confirm="onConfirmDelete"
+    @cancel="dialogVisible = false"
+  />
   <Toast ref="toastRef" :message="toastMsg" :type="toastType" :duration="1500" />
 </template>
 

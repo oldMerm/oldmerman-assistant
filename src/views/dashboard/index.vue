@@ -174,7 +174,7 @@ const saveSettings = async () => {
 }
 
 .sidebar {
-  width: 240px;
+  width: 200px;
   background: rgba(249, 249, 249, 0.85);
   backdrop-filter: blur(10px);
   border-right: 1px solid rgba(59, 130, 246, 0.1);
@@ -195,7 +195,7 @@ const saveSettings = async () => {
   font-weight: 500;
   border-radius: 8px;
   transition: all 0.3s ease;
-  text-align: center;
+  padding-left: 28px;
 }
 
 .sidebar-link:hover {

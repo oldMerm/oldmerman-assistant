@@ -46,6 +46,7 @@ const toastRef = ref()
 const msg = ref('')
 const type = ref<'success' | 'error'>('success')
 
+// how to use
 const openSettings = async () => {
   try {
     const res = await httpInstance.get<any, Response>("/user/setting")
