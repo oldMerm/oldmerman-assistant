@@ -257,6 +257,8 @@ const handleScroll = () => {
 
 // 弹框
 import Dialog from '@/utils/dialog/Dialog.vue'
+
+// 删除模型弹框
 const dialogVisible = ref(false)
 const pendingDelete = ref<{ typeId: number; modelId: number | null } | null>(null)
 
@@ -265,12 +267,198 @@ const openDeleteDialog = (typeId: number, modelId: number | null) => {
   dialogVisible.value = true
 }
 
-const onConfirmDelete = () => {
+const onConfirmDelete = async () => {
   if (pendingDelete.value) {
-    deleteModel(pendingDelete.value.typeId, pendingDelete.value.modelId)
+    const modelId = pendingDelete.value.modelId
+    if (modelId !== null && modelId !== undefined) {
+      await deleteModelApi(pendingDelete.value.typeId, modelId)
+    }
     pendingDelete.value = null
   }
   dialogVisible.value = false
+}
+
+// 删除供应商弹框
+const deleteProviderVisible = ref(false)
+const pendingDeleteProvider = ref<string | null>(null)
+
+const openDeleteProviderDialog = (groupUuid: string) => {
+  pendingDeleteProvider.value = groupUuid
+  deleteProviderVisible.value = true
+}
+
+const onConfirmDeleteProvider = async () => {
+  if (pendingDeleteProvider.value) {
+    await deleteProviderApi(pendingDeleteProvider.value)
+    pendingDeleteProvider.value = null
+  }
+  deleteProviderVisible.value = false
+}
+
+// 添加供应商弹框
+const addProviderVisible = ref(false)
+const addProviderForm = ref({
+  group_name: '',
+  group_attr: '',
+  group_key: '',
+  base_url: ''
+})
+const addProviderLoading = ref(false)
+
+const openAddProviderDialog = () => {
+  addProviderForm.value = { group_name: '', group_attr: '', group_key: '', base_url: '' }
+  addProviderVisible.value = true
+}
+
+const onConfirmAddProvider = async () => {
+  if (!addProviderForm.value.group_name || !addProviderForm.value.group_key || !addProviderForm.value.base_url) {
+    showToast('请填写完整信息!')
+    return
+  }
+  addProviderLoading.value = true
+  try {
+    const res = await httpInstance.post<any, Response>('/model_group', {
+      group_name: addProviderForm.value.group_name,
+      group_attr: addProviderForm.value.group_attr || null,
+      group_key: addProviderForm.value.group_key,
+      base_url: addProviderForm.value.base_url
+    })
+    if (res.code !== 200) {
+      showToast(res.message || '添加供应商失败!')
+      return
+    }
+    addProviderVisible.value = false
+    showToast('添加成功!', 'success')
+    // 刷新分组列表并切换到新供应商
+    await fetchAllGroups()
+    if (res.data) {
+      const newGroup = groupList.value.find(g => g.group_uuid === res.data)
+      if (newGroup) {
+        await selectGroup(newGroup)
+      }
+    }
+  } catch (error) {
+    showToast(`添加供应商失败:${error}!`)
+  } finally {
+    addProviderLoading.value = false
+  }
+}
+
+// 删除供应商API
+const deleteProviderApi = async (groupUuid: string) => {
+  try {
+    const res = await httpInstance.delete<any, Response>(`/model_group?group_uuid=${groupUuid}`)
+    if (res.code !== 200) {
+      showToast(res.message || '删除供应商失败!')
+      return
+    }
+    showToast('删除成功!', 'success')
+    // 刷新列表并切换到第一个
+    await fetchAllGroups()
+    const firstGroup = groupList.value[0]
+    if (firstGroup) {
+      await selectGroup(firstGroup)
+    } else {
+      currentGroup.value = null
+      categories.value = []
+    }
+  } catch (error) {
+    showToast(`删除供应商失败:${error}!`)
+  }
+}
+
+// 模型类型
+interface ModelType {
+  id: number
+  model_type_name: string
+}
+
+const modelTypes = ref<ModelType[]>([])
+const modelTypeLoading = ref(false)
+
+// 添加模型弹框
+const addModelVisible = ref(false)
+const addModelForm = ref({
+  model_name: '',
+  api_key: '',
+  api_key_original: '',
+  base_url: '',
+  type_id: null as number | null
+})
+const addModelLoading = ref(false)
+
+const openAddModelDialog = async () => {
+  addModelForm.value = {
+    model_name: '',
+    api_key: currentGroup.value?.api_key ? formatApiKey(currentGroup.value.api_key) : '',
+    api_key_original: currentGroup.value?.api_key || '',
+    base_url: currentGroup.value?.base_url || '',
+    type_id: null
+  }
+  // 加载模型类型
+  await fetchModelTypes()
+  addModelVisible.value = true
+}
+
+const fetchModelTypes = async () => {
+  modelTypeLoading.value = true
+  try {
+    const res = await httpInstance.get<any, Response>('/model_type/all')
+    if (res.code === 200 && res.data) {
+      modelTypes.value = res.data
+    }
+  } catch (error) {
+    showToast(`获取模型类型失败:${error}!`)
+  } finally {
+    modelTypeLoading.value = false
+  }
+}
+
+const onConfirmAddModel = async () => {
+  if (!addModelForm.value.model_name || !addModelForm.value.type_id) {
+    showToast('请填写模型名称并选择类型!')
+    return
+  }
+  addModelLoading.value = true
+  try {
+    const res = await httpInstance.post<any, Response>('/model', {
+      model_name: addModelForm.value.model_name,
+      group_uuid: currentGroup.value?.group_uuid,
+      api_key: addModelForm.value.api_key_original || null,
+      base_url: addModelForm.value.base_url || null,
+      type_id: addModelForm.value.type_id
+    })
+    if (res.code !== 200) {
+      showToast(res.message || '添加模型失败!')
+      return
+    }
+    addModelVisible.value = false
+    showToast('添加成功!', 'success')
+    // 刷新模型列表
+    if (currentGroup.value?.group_uuid) {
+      await fetchGroupModels(currentGroup.value.group_uuid)
+    }
+  } catch (error) {
+    showToast(`添加模型失败:${error}!`)
+  } finally {
+    addModelLoading.value = false
+  }
+}
+
+// 删除模型API
+const deleteModelApi = async (typeId: number, modelId: number) => {
+  try {
+    const res = await httpInstance.delete<any, Response>(`/model?model_id=${modelId}`)
+    if (res.code !== 200) {
+      showToast(res.message || '删除模型失败!')
+      return
+    }
+    // 本地状态更新
+    deleteModel(typeId, modelId)
+    showToast('删除成功!', 'success')
+  } catch (error) {
+    showToast(`删除模型失败:${error}!`)
+  }
 }
 
 </script>
@@ -310,8 +498,11 @@ const onConfirmDelete = () => {
                   </div>
                   <div class="provider-name">{{ group.group_name }}</div>
                 </div>
-                <div class="provider-option add-group">
+                <div class="provider-option add-group" @click.stop="openAddProviderDialog">
                   + 添加提供商
+                </div>
+                <div class="provider-option add-group" @click.stop="currentGroup?.group_uuid && openDeleteProviderDialog(currentGroup.group_uuid)">
+                  - 删除提供商
                 </div>
               </div>
             </Transition>
@@ -333,7 +524,7 @@ const onConfirmDelete = () => {
           </div>
         </div>
 
-        <div class="add-model-btn">
+        <div class="add-model-btn" @click="openAddModelDialog">
           <span>+ 添加模型</span>
         </div>
       </div>
@@ -368,6 +559,73 @@ const onConfirmDelete = () => {
     @confirm="onConfirmDelete"
     @cancel="dialogVisible = false"
   />
+
+  <!-- 删除供应商确认弹框 -->
+  <Dialog
+    v-model:visible="deleteProviderVisible"
+    title="确认删除供应商"
+    content="确定要删除该供应商吗？此操作将同时删除该供应商下的所有模型，无法撤销。"
+    @confirm="onConfirmDeleteProvider"
+    @cancel="deleteProviderVisible = false"
+  />
+
+  <!-- 添加供应商弹框 -->
+  <Dialog
+    v-model:visible="addProviderVisible"
+    title="添加供应商"
+    :confirmLoading="addProviderLoading"
+    @confirm="onConfirmAddProvider"
+    @cancel="addProviderVisible = false"
+  >
+    <div class="form-item">
+      <label>提供商名称 *</label>
+      <input v-model="addProviderForm.group_name" type="text" placeholder="请输入提供商名称" />
+    </div>
+    <div class="form-item">
+      <label>提供商图片(URL)</label>
+      <input v-model="addProviderForm.group_attr" type="text" placeholder="请输入图片URL(选填)" />
+    </div>
+    <div class="form-item">
+      <label>API-Key *</label>
+      <input v-model="addProviderForm.group_key" type="password" placeholder="请输入API-Key" />
+    </div>
+    <div class="form-item">
+      <label>Base URL *</label>
+      <input v-model="addProviderForm.base_url" type="text" placeholder="请输入Base URL(仅支持OpenAI格式)" />
+    </div>
+  </Dialog>
+
+  <!-- 添加模型弹框 -->
+  <Dialog
+    v-model:visible="addModelVisible"
+    title="添加模型"
+    :confirmLoading="addModelLoading"
+    @confirm="onConfirmAddModel"
+    @cancel="addModelVisible = false"
+  >
+    <div class="form-item">
+      <label>模型名称 *</label>
+      <input v-model="addModelForm.model_name" type="text" placeholder="请输入模型名称" />
+    </div>
+    <div class="form-item">
+      <label>API-Key</label>
+      <input v-model="addModelForm.api_key_original" type="password" placeholder="请输入API-Key(留空则使用供应商默认)" />
+    </div>
+    <div class="form-item">
+      <label>Base URL</label>
+      <input v-model="addModelForm.base_url" type="text" placeholder="请输入Base URL(留空则使用供应商默认)" />
+    </div>
+    <div class="form-item">
+      <label>模型类型 *</label>
+      <select v-model="addModelForm.type_id">
+        <option :value="null" disabled>请选择模型类型</option>
+        <option v-for="type in modelTypes" :key="type.id" :value="type.id">
+          {{ type.model_type_name }}
+        </option>
+      </select>
+    </div>
+  </Dialog>
+
   <Toast ref="toastRef" :message="toastMsg" :type="toastType" :duration="1500" />
 </template>
 
@@ -723,5 +981,40 @@ const onConfirmDelete = () => {
   .categories-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.form-item {
+  margin-bottom: 16px;
+}
+
+.form-item label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.form-item input,
+.form-item select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  font-size: 14px;
+  color: #333;
+  background: #fff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-item input:focus,
+.form-item select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.form-item input::placeholder {
+  color: #aaa;
 }
 </style>

@@ -66,3 +66,39 @@ const openSettings = async () => {
   showSettings.value = true
 }
 ```
+
+## how to use the dialog
+
+source file `@utils/dialog/Dialog.vue`.
+
+**Import**
+
+```ts
+import Dialog from '@/utils/dialog/Dialog.vue';
+```
+
+**Then**
+Html: `<Dialog v-model:visible="visible" title="标题" content="内容" @confirm="onConfirm" @cancel="onCancel" />`
+
+**Use**
+
+```ts
+// dialog state
+const dialogVisible = ref(false)
+
+// open dialog
+const openDialog = () => {
+  dialogVisible.value = true
+}
+
+// confirm callback
+const onConfirm = () => {
+  console.log('用户点击了确定');
+  dialogVisible.value = false
+}
+
+// cancel callback
+const onCancel = () => {
+  dialogVisible.value = false
+}
+```

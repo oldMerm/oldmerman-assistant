@@ -6,11 +6,15 @@
           <h3 class="dialog-title">{{ title }}</h3>
         </div>
         <div class="dialog-body">
-          <p class="dialog-content">{{ content }}</p>
+          <p class="dialog-content" v-if="content">{{ content }}</p>
+          <slot></slot>
         </div>
         <div class="dialog-footer">
-          <button class="btn btn-cancel" @click="handleCancel">取消</button>
-          <button class="btn btn-confirm" @click="handleConfirm">确定</button>
+          <button class="btn btn-cancel" @click="handleCancel" :disabled="confirmLoading">取消</button>
+          <button class="btn btn-confirm" @click="handleConfirm" :disabled="confirmLoading">
+            <span v-if="confirmLoading" class="loading-spinner"></span>
+            <span v-else>确定</span>
+          </button>
         </div>
       </div>
     </div>
@@ -22,12 +26,14 @@ import { ref, watch } from 'vue';
 
 interface Props {
   title: string;
-  content: string;
+  content?: string;
   visible?: boolean;
+  confirmLoading?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  visible: false
+  visible: false,
+  confirmLoading: false
 });
 
 const emit = defineEmits<{
@@ -149,6 +155,27 @@ defineExpose({ show, hide });
 .btn-confirm:hover {
   background: #3a7fc8;
   box-shadow: 0 2px 8px rgba(74, 144, 217, 0.3);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .dialog-fade-enter-active {
