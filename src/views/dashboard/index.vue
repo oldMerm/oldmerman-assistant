@@ -13,7 +13,7 @@ const navItems = ref([
 const sidebarItems = ref([
   { label: 'Component C1', path: '/dashboard/component1' },
   { label: '模型注册', path: '/dashboard/model' },
-  { label: 'Component C3', path: '/dashboard/component3' },
+  { label: '知识库管理', path: '/dashboard/component3' },
   { label: 'Component C4', path: '/dashboard/component4' },
 ])
 // 初始化setting
