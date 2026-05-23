@@ -414,6 +414,29 @@ const fetchModelTypes = async () => {
   }
 }
 
+const modelTypeDropdownOpen = ref(false)
+
+const selectedModelTypeName = computed(() => {
+  const t = modelTypes.value.find(t => t.id === addModelForm.value.type_id)
+  return t?.model_type_name || null
+})
+
+const toggleModelTypeDropdown = () => {
+  modelTypeDropdownOpen.value = !modelTypeDropdownOpen.value
+  if (modelTypeDropdownOpen.value && modelTypes.value.length === 0) {
+    fetchModelTypes()
+  }
+}
+
+const selectModelType = (type: ModelType) => {
+  addModelForm.value.type_id = type.id
+  modelTypeDropdownOpen.value = false
+}
+
+const closeModelTypeDropdown = () => {
+  modelTypeDropdownOpen.value = false
+}
+
 const onConfirmAddModel = async () => {
   if (!addModelForm.value.model_name || !addModelForm.value.type_id) {
     showToast('请填写模型名称并选择类型!')
@@ -608,6 +631,28 @@ const deleteModelApi = async (typeId: number, modelId: number) => {
       <input v-model="addModelForm.model_name" type="text" placeholder="请输入模型名称" />
     </div>
     <div class="form-item">
+      <label>模型类型 *</label>
+      <div class="custom-select" @blur="closeModelTypeDropdown" tabindex="0">
+        <div class="select-trigger" @click="toggleModelTypeDropdown">
+          <span :class="{ placeholder: !selectedModelTypeName }">{{ selectedModelTypeName || '请选择模型类型' }}</span>
+          <span class="arrow" :class="{ open: modelTypeDropdownOpen }">▾</span>
+        </div>
+        <Transition name="select-dropdown">
+          <div v-if="modelTypeDropdownOpen" class="select-dropdown">
+            <div v-if="modelTypeLoading" class="option disabled">加载中...</div>
+            <div v-else-if="modelTypes.length === 0" class="option disabled">暂无可用类型</div>
+            <div
+              v-for="type in modelTypes"
+              :key="type.id"
+              class="option"
+              :class="{ active: addModelForm.type_id === type.id }"
+              @mousedown.prevent="selectModelType(type)"
+            >{{ type.model_type_name }}</div>
+          </div>
+        </Transition>
+      </div>
+    </div>
+    <div class="form-item">
       <label>API-Key</label>
       <input v-model="addModelForm.api_key_original" type="password" placeholder="请输入API-Key(留空则使用供应商默认)" />
     </div>
@@ -615,15 +660,7 @@ const deleteModelApi = async (typeId: number, modelId: number) => {
       <label>Base URL</label>
       <input v-model="addModelForm.base_url" type="text" placeholder="请输入Base URL(留空则使用供应商默认)" />
     </div>
-    <div class="form-item">
-      <label>模型类型 *</label>
-      <select v-model="addModelForm.type_id">
-        <option :value="null" disabled>请选择模型类型</option>
-        <option v-for="type in modelTypes" :key="type.id" :value="type.id">
-          {{ type.model_type_name }}
-        </option>
-      </select>
-    </div>
+    
   </Dialog>
 
   <Toast ref="toastRef" :message="toastMsg" :type="toastType" :duration="1500" />
@@ -995,8 +1032,7 @@ const deleteModelApi = async (typeId: number, modelId: number) => {
   margin-bottom: 8px;
 }
 
-.form-item input,
-.form-item select {
+.form-item input {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid rgba(0, 0, 0, 0.12);
@@ -1005,10 +1041,10 @@ const deleteModelApi = async (typeId: number, modelId: number) => {
   color: #333;
   background: #fff;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
 }
 
-.form-item input:focus,
-.form-item select:focus {
+.form-item input:focus {
   outline: none;
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
@@ -1016,5 +1052,100 @@ const deleteModelApi = async (typeId: number, modelId: number) => {
 
 .form-item input::placeholder {
   color: #aaa;
+}
+
+.custom-select {
+  position: relative;
+  outline: none;
+}
+
+.select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  font-size: 14px;
+  color: #333;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
+}
+
+.select-trigger:hover {
+  border-color: #667eea;
+}
+
+.select-trigger .placeholder {
+  color: #aaa;
+}
+
+.arrow {
+  font-size: 12px;
+  color: #888;
+  transition: transform 0.2s ease;
+}
+
+.arrow.open {
+  transform: rotate(180deg);
+}
+
+.select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.option {
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.option:hover {
+  background: rgba(102, 126, 234, 0.08);
+}
+
+.option.active {
+  color: #667eea;
+  font-weight: 600;
+  background: rgba(102, 126, 234, 0.06);
+}
+
+.option.disabled {
+  color: #aaa;
+  cursor: default;
+}
+
+.select-dropdown-enter-active {
+  animation: selectDropdownIn 0.2s ease-out;
+}
+
+.select-dropdown-leave-active {
+  animation: selectDropdownIn 0.15s ease-in reverse;
+}
+
+@keyframes selectDropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { httpInstance, type Response } from '@/utils/http'
 import Toast from '@/utils/toast/Toast.vue'
 import Dialog from '@/utils/dialog/Dialog.vue'
@@ -12,6 +12,7 @@ interface VectorCollection {
   collection_description?: string | null
   items_number?: number | null
   created_at?: string
+  dimensions?: number | null
 }
 
 interface VectorCollectionParam {
@@ -20,6 +21,18 @@ interface VectorCollectionParam {
   collection_alias?: string | null
   collection_description?: string | null
   items_number?: number | null
+  dimensions?: number | null
+}
+
+interface ModelRenderParam1 {
+  model_id?: number | null
+  model_name?: string | null
+}
+
+interface ModelsWithTypeParam {
+  type_id?: number | null
+  type_name?: string | null
+  models?: ModelRenderParam1[] | null
 }
 
 const collectionList = ref<VectorCollection[]>([])
@@ -39,7 +52,10 @@ const formatDate = (dateStr?: string) => {
   if (!dateStr) return '-'
   try {
     const date = new Date(dateStr)
-    return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
   } catch {
     return dateStr
   }
@@ -48,7 +64,7 @@ const formatDate = (dateStr?: string) => {
 const fetchCollections = async () => {
   try {
     isLoading.value = true
-    const res = await httpInstance.get<any, Response>('/vector_manage/render')
+    const res = await httpInstance.get<any, Response>('/vector-manage/render')
     if (res.code !== 200) {
       showToast(res.message || '获取集合列表失败!')
       return
@@ -72,16 +88,62 @@ const addCollectionForm = ref<VectorCollectionParam>({
   collection_name: '',
   collection_alias: '',
   collection_description: '',
-  items_number: 0
+  items_number: 0,
+  dimensions: 1024
 })
 const addCollectionLoading = ref(false)
+
+const vectorModels = ref<ModelRenderParam1[]>([])
+const vectorModelsLoading = ref(false)
+const dropdownOpen = ref(false)
+
+const selectedModelName = computed(() => {
+  const m = vectorModels.value.find(m => m.model_id === addCollectionForm.value.embedding_id)
+  return m?.model_name || null
+})
+
+const toggleDropdown = () => {
+  dropdownOpen.value = !dropdownOpen.value
+  if (dropdownOpen.value) {
+    fetchVectorModels()
+  }
+}
+
+const selectModel = (m: ModelRenderParam1) => {
+  addCollectionForm.value.embedding_id = m.model_id ?? null
+  dropdownOpen.value = false
+}
+
+const closeDropdown = () => {
+  dropdownOpen.value = false
+}
+
+const fetchVectorModels = async () => {
+  if (vectorModels.value.length > 0) return
+  vectorModelsLoading.value = true
+  try {
+    const res = await httpInstance.get<any, Response>('/model_type/vector-models', { params: { type_name: '向量模型' } })
+    if (res.code !== 200) {
+      showToast(res.message || '获取向量模型失败!')
+      return
+    }
+    if (res.data?.models) {
+      vectorModels.value = res.data.models
+    }
+  } catch (error) {
+    showToast(`获取向量模型失败:${error}!`)
+  } finally {
+    vectorModelsLoading.value = false
+  }
+}
 
 const openAddCollectionDialog = () => {
   addCollectionForm.value = {
     collection_name: '',
     collection_alias: '',
     collection_description: '',
-    items_number: 0
+    items_number: 0,
+    embedding_id: null
   }
   addCollectionVisible.value = true
 }
@@ -91,11 +153,19 @@ const onConfirmAddCollection = async () => {
     showToast('请填写集合名称!')
     return
   }
+
+  const dim = addCollectionForm.value.dimensions;
+  if (dim !== undefined && dim !== null) {
+    if (dim % 256 !== 0 || dim < 256 || dim > 2048) {
+      showToast('向量维度必须是256的倍数，且范围在256~2048之间');
+      return;
+    }
+  }
   addCollectionLoading.value = true
   try {
-    const res = await httpInstance.post<any, Response>('/vector_manage', addCollectionForm.value)
+    const res = await httpInstance.post<any, Response>('/vector-manage', addCollectionForm.value)
     if (res.code !== 200) {
-      showToast(res.message || '添加集合失败!')
+      showToast(`集合添加失败:${res.message}` || '添加集合失败!')
       return
     }
     addCollectionVisible.value = false
@@ -116,19 +186,24 @@ const openDeleteCollectionDialog = (collection: VectorCollection) => {
   deleteCollectionVisible.value = true
 }
 
-const onConfirmDeleteCollection = () => {
+const onConfirmDeleteCollection = async () => {
+  const idToRemove = pendingDeleteCollection.value?.id
+  if (idToRemove === null || idToRemove === undefined) return
+
+  const res = await httpInstance.delete<any, Response>(`/vector-manage/${idToRemove}`)
+  if (res.code !== 200) {
+    showToast(`集合删除失败:${res.message}`)
+  }
+  collectionList.value = collectionList.value.filter(item => item.id !== idToRemove)
+  showToast(`集合${':' + pendingDeleteCollection.value?.collection_name || ''}，删除成功!`, 'success')
   deleteCollectionVisible.value = false
   pendingDeleteCollection.value = null
-  showToast('删除功能暂未开放!')
 }
 
 const onAddDocument = () => {
   alert('功能未开放')
 }
 
-const onRemoveDocument = () => {
-  alert('功能未开放')
-}
 </script>
 
 <template>
@@ -157,15 +232,17 @@ const onRemoveDocument = () => {
             <span class="delete-icon" @click="openDeleteCollectionDialog(collection)">×</span>
           </div>
           <div class="card-body">
-            <div class="collection-desc" v-if="collection.collection_description">{{ collection.collection_description }}</div>
+            <div class="collection-desc" v-if="collection.collection_description">{{
+              collection.collection_description.substring(0, 20) }}</div>
             <div class="collection-meta">
               <span class="meta-item">📄 {{ collection.items_number ?? 0 }} 条文档</span>
               <span class="meta-item">📅 {{ formatDate(collection.created_at) }}</span>
+              <span class="meta-item">📚 {{ collection.dimensions }}</span>
+              <span class="meta-item">🤖 {{ collection.embedding_id || 'default_embedding' }}</span>
             </div>
           </div>
           <div class="card-footer">
             <button class="btn-add-doc" @click="onAddDocument">添加文档</button>
-            <button class="btn-remove-doc" @click="onRemoveDocument">撤销文档</button>
           </div>
         </div>
       </div>
@@ -173,17 +250,17 @@ const onRemoveDocument = () => {
         <p>暂无集合，点击右上角"添加集合"创建第一个知识库集合</p>
       </div>
 
-      <div class="footer-tips">注：<br>1.集合名称不支持中文(3~512字符)<br>2.不要创建太多集合，建议按语言分类，或者文字图片分类等</div>
+      <div class="footer-tips">
+        注意事项：<br>
+        1.集合名称不支持中文(3~512字符)<br>
+        2.请不要创建太多集合，且建议按语言分类，或者文字图片分类等<br>
+        3.注意集合所使用的模型，若删除了对应的模型，则会走默认的模型
+      </div>
     </template>
   </div>
 
-  <Dialog
-    v-model:visible="addCollectionVisible"
-    title="添加集合"
-    :confirmLoading="addCollectionLoading"
-    @confirm="onConfirmAddCollection"
-    @cancel="addCollectionVisible = false"
-  >
+  <Dialog v-model:visible="addCollectionVisible" title="添加集合" :confirmLoading="addCollectionLoading"
+    @confirm="onConfirmAddCollection" @cancel="addCollectionVisible = false">
     <div class="form-item">
       <label>集合名称 *</label>
       <input v-model="addCollectionForm.collection_name" type="text" placeholder="请输入集合名称" />
@@ -194,17 +271,34 @@ const onRemoveDocument = () => {
     </div>
     <div class="form-item">
       <label>集合描述</label>
-      <textarea v-model="addCollectionForm.collection_description" placeholder="请输入集合描述(选填)" rows="3"></textarea>
+      <textarea v-model="addCollectionForm.collection_description" placeholder="请输入集合描述(选填)" rows="1"></textarea>
+    </div>
+    <div class="form-item">
+      <label>向量模型</label>
+      <div class="custom-select" @blur="closeDropdown" tabindex="0">
+        <div class="select-trigger" @click="toggleDropdown">
+          <span :class="{ placeholder: !selectedModelName }">{{ selectedModelName || '请选择向量模型' }}</span>
+          <span class="arrow" :class="{ open: dropdownOpen }">▾</span>
+        </div>
+        <Transition name="dropdown">
+          <div v-if="dropdownOpen" class="select-dropdown">
+            <div v-if="vectorModelsLoading" class="option disabled">加载中...</div>
+            <div v-else-if="vectorModels.length === 0" class="option disabled">暂无可用模型</div>
+            <div v-for="(m, idx) in vectorModels" :key="m.model_id ?? idx" class="option"
+              :class="{ active: addCollectionForm.embedding_id === m.model_id }" @mousedown.prevent="selectModel(m)">{{
+                m.model_name }}</div>
+          </div>
+        </Transition>
+      </div>
+    </div>
+    <div class="form-item">
+      <label>维度选择</label>
+      <input v-model="addCollectionForm.dimensions" placeholder="向量维度(选填, 必须为256的1~8倍数)"></input>
     </div>
   </Dialog>
 
-  <Dialog
-    v-model:visible="deleteCollectionVisible"
-    title="确认删除"
-    content="确定要删除该集合吗？此操作无法撤销。"
-    @confirm="onConfirmDeleteCollection"
-    @cancel="deleteCollectionVisible = false"
-  />
+  <Dialog v-model:visible="deleteCollectionVisible" title="确认删除" content="确定要删除该集合吗？此操作无法撤销。"
+    @confirm="onConfirmDeleteCollection" @cancel="deleteCollectionVisible = false" />
 
   <Toast ref="toastRef" :message="toastMsg" :type="toastType" :duration="1500" />
 </template>
@@ -218,7 +312,8 @@ const onRemoveDocument = () => {
   min-height: calc(100% - 32px);
 }
 
-.loading-state, .empty-state {
+.loading-state,
+.empty-state {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -374,6 +469,7 @@ const onRemoveDocument = () => {
   gap: 16px;
   color: #888;
   font-size: 12px;
+  flex-wrap: wrap;
 }
 
 
@@ -386,7 +482,8 @@ const onRemoveDocument = () => {
   border-top: 1px solid #f0f0f0;
 }
 
-.btn-add-doc, .btn-remove-doc {
+.btn-add-doc,
+.btn-remove-doc {
   flex: 1;
   padding: 8px 12px;
   border-radius: 8px;
@@ -453,6 +550,102 @@ const onRemoveDocument = () => {
 .form-item input::placeholder,
 .form-item textarea::placeholder {
   color: #aaa;
+}
+
+.custom-select {
+  position: relative;
+  outline: none;
+}
+
+.select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  font-size: 14px;
+  color: #333;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
+}
+
+.select-trigger:hover {
+  border-color: #667eea;
+}
+
+.select-trigger .placeholder {
+  color: #aaa;
+}
+
+.arrow {
+  font-size: 12px;
+  color: #888;
+  transition: transform 0.2s ease;
+}
+
+.arrow.open {
+  transform: rotate(180deg);
+}
+
+.select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.option {
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.option:hover {
+  background: rgba(102, 126, 234, 0.08);
+}
+
+.option.active {
+  color: #667eea;
+  font-weight: 600;
+  background: rgba(102, 126, 234, 0.06);
+}
+
+.option.disabled {
+  color: #aaa;
+  cursor: default;
+}
+
+.dropdown-enter-active {
+  animation: dropdownIn 0.2s ease-out;
+}
+
+.dropdown-leave-active {
+  animation: dropdownIn 0.15s ease-in reverse;
+}
+
+@keyframes dropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @media (max-width: 640px) {
