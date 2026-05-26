@@ -200,8 +200,105 @@ const onConfirmDeleteCollection = async () => {
   pendingDeleteCollection.value = null
 }
 
-const onAddDocument = () => {
-  alert('功能未开放')
+const addDocumentVisible = ref(false)
+const addDocumentLoading = ref(false)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const addDocumentForm = ref({
+  collection_name: '',
+  file: null as File | null,
+  language: 'en'
+})
+
+const languageList = [
+  { value: 'en', label: 'English' },
+  { value: 'cn', label: '中文' },
+]
+
+const addDocCollectionDropdownOpen = ref(false)
+const addDocLanguageDropdownOpen = ref(false)
+
+const selectedAddDocCollectionName = computed(() => {
+  return addDocumentForm.value.collection_name || null
+})
+
+const selectedAddDocLanguage = computed(() => {
+  const l = languageList.find(l => l.value === addDocumentForm.value.language)
+  return l?.label || null
+})
+
+const toggleAddDocCollectionDropdown = () => {
+  addDocCollectionDropdownOpen.value = !addDocCollectionDropdownOpen.value
+}
+
+const selectAddDocCollection = (name: string) => {
+  addDocumentForm.value.collection_name = name
+  addDocCollectionDropdownOpen.value = false
+}
+
+const closeAddDocCollectionDropdown = () => {
+  addDocCollectionDropdownOpen.value = false
+}
+
+const toggleAddDocLanguageDropdown = () => {
+  addDocLanguageDropdownOpen.value = !addDocLanguageDropdownOpen.value
+}
+
+const selectAddDocLanguage = (lang: string) => {
+  addDocumentForm.value.language = lang
+  addDocLanguageDropdownOpen.value = false
+}
+
+const closeAddDocLanguageDropdown = () => {
+  addDocLanguageDropdownOpen.value = false
+}
+
+const triggerFileInput = () => {
+  fileInputRef.value?.click()
+}
+
+const onAddDocument = (collection: VectorCollection) => {
+  addDocumentForm.value = {
+    collection_name: collection.collection_name || '',
+    file: null,
+    language: 'en'
+  }
+  addDocumentVisible.value = true
+}
+
+const onConfirmAddDocument = async () => {
+  if (!addDocumentForm.value.collection_name) {
+    showToast('请选择集合!')
+    return
+  }
+  if (!addDocumentForm.value.file) {
+    showToast('请选择文件!')
+    return
+  }
+  if (addDocumentForm.value.file.size > 10 * 1024 * 1024) {
+    showToast('文件大小不能超过10MB!')
+    return
+  }
+  addDocumentLoading.value = true
+  try {
+    const formData = new FormData()
+    formData.append('collection_name', addDocumentForm.value.collection_name)
+    formData.append('file', addDocumentForm.value.file)
+    formData.append('language', addDocumentForm.value.language)
+    const res = await httpInstance.post<any, Response>('/vector-manage/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    if (res.code !== 200) {
+      showToast(res.message || '文档添加失败!')
+      return
+    }
+    addDocumentVisible.value = false
+    showToast('文档添加成功!', 'success')
+    await fetchCollections()
+  } catch (error) {
+    showToast(`文档添加失败:${error}!`)
+  } finally {
+    addDocumentLoading.value = false
+  }
 }
 
 </script>
@@ -242,7 +339,7 @@ const onAddDocument = () => {
             </div>
           </div>
           <div class="card-footer">
-            <button class="btn-add-doc" @click="onAddDocument">添加文档</button>
+            <button class="btn-add-doc" @click="onAddDocument(collection)">添加文档</button>
           </div>
         </div>
       </div>
@@ -299,6 +396,52 @@ const onAddDocument = () => {
 
   <Dialog v-model:visible="deleteCollectionVisible" title="确认删除" content="确定要删除该集合吗？此操作无法撤销。"
     @confirm="onConfirmDeleteCollection" @cancel="deleteCollectionVisible = false" />
+
+  <Dialog v-model:visible="addDocumentVisible" title="添加文档" :confirmLoading="addDocumentLoading"
+    @confirm="onConfirmAddDocument" @cancel="addDocumentVisible = false">
+    <div class="form-item">
+      <label>选择集合 *</label>
+      <div class="custom-select" @blur="closeAddDocCollectionDropdown" tabindex="0">
+        <div class="select-trigger" @click="toggleAddDocCollectionDropdown">
+          <span :class="{ placeholder: !selectedAddDocCollectionName }">{{ selectedAddDocCollectionName || '请选择集合' }}</span>
+          <span class="arrow" :class="{ open: addDocCollectionDropdownOpen }">▾</span>
+        </div>
+        <Transition name="select-dropdown">
+          <div v-if="addDocCollectionDropdownOpen" class="select-dropdown">
+            <div v-if="collectionList.length === 0" class="option disabled">暂无集合</div>
+            <div v-for="(c, idx) in collectionList" :key="c.id ?? idx" class="option"
+              :class="{ active: addDocumentForm.collection_name === c.collection_name }"
+              @mousedown.prevent="selectAddDocCollection(c.collection_name ?? '')">{{ c.collection_name }}</div>
+          </div>
+        </Transition>
+      </div>
+    </div>
+    <div class="form-item">
+      <label>选择文件 *</label>
+      <input ref="fileInputRef" type="file" @change="addDocumentForm.file = ($event.target as HTMLInputElement).files?.[0] || null" hidden />
+      <div class="file-upload-btn" @click="triggerFileInput">
+        <span class="upload-icon">📎</span>
+        <span v-if="addDocumentForm.file">{{ addDocumentForm.file.name }}</span>
+        <span v-else>点击选择文件（最大10MB）</span>
+      </div>
+    </div>
+    <div class="form-item">
+      <label>文档语言</label>
+      <div class="custom-select" @blur="closeAddDocLanguageDropdown" tabindex="0">
+        <div class="select-trigger" @click="toggleAddDocLanguageDropdown">
+          <span>{{ selectedAddDocLanguage || 'English' }}</span>
+          <span class="arrow" :class="{ open: addDocLanguageDropdownOpen }">▾</span>
+        </div>
+        <Transition name="select-dropdown">
+          <div v-if="addDocLanguageDropdownOpen" class="select-dropdown">
+            <div v-for="l in languageList" :key="l.value" class="option"
+              :class="{ active: addDocumentForm.language === l.value }"
+              @mousedown.prevent="selectAddDocLanguage(l.value)">{{ l.label }}</div>
+          </div>
+        </Transition>
+      </div>
+    </div>
+  </Dialog>
 
   <Toast ref="toastRef" :message="toastMsg" :type="toastType" :duration="1500" />
 </template>
@@ -550,6 +693,30 @@ const onAddDocument = () => {
 .form-item input::placeholder,
 .form-item textarea::placeholder {
   color: #aaa;
+}
+
+.file-upload-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px dashed rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  background: rgba(102, 126, 234, 0.04);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+  color: #666;
+}
+
+.file-upload-btn:hover {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.08);
+  color: #333;
+}
+
+.upload-icon {
+  font-size: 16px;
 }
 
 .custom-select {
