@@ -148,9 +148,37 @@ const openAddCollectionDialog = () => {
   addCollectionVisible.value = true
 }
 
+const validateCollectionName = (name: string): string | null => {
+  if (name.length < 3 || name.length > 512) {
+    return '集合名称长度必须在3~512个字符之间!'
+  }
+  if (!/^[a-z0-9]/.test(name)) {
+    return '集合名称必须以小写字母或数字开头!'
+  }
+  if (!/[a-z0-9]$/.test(name)) {
+    return '集合名称必须以小写字母或数字结尾!'
+  }
+  if (!/^[a-z0-9][a-z0-9.\-_]*[a-z0-9]$/.test(name)) {
+    return '集合名称只能包含小写字母、数字、点、连字符和下划线!'
+  }
+  if (/\.\./.test(name)) {
+    return '集合名称不能包含连续的两个点!'
+  }
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(name)) {
+    return '集合名称不能是有效的IP地址!'
+  }
+  return null
+}
+
 const onConfirmAddCollection = async () => {
-  if (!addCollectionForm.value.collection_name) {
+  const name = addCollectionForm.value.collection_name
+  if (!name) {
     showToast('请填写集合名称!')
+    return
+  }
+  const validationError = validateCollectionName(name)
+  if (validationError) {
+    showToast(validationError)
     return
   }
 
@@ -399,47 +427,53 @@ const onConfirmAddDocument = async () => {
 
   <Dialog v-model:visible="addDocumentVisible" title="添加文档" :confirmLoading="addDocumentLoading"
     @confirm="onConfirmAddDocument" @cancel="addDocumentVisible = false">
-    <div class="form-item">
-      <label>选择集合 *</label>
-      <div class="custom-select" @blur="closeAddDocCollectionDropdown" tabindex="0">
-        <div class="select-trigger" @click="toggleAddDocCollectionDropdown">
-          <span :class="{ placeholder: !selectedAddDocCollectionName }">{{ selectedAddDocCollectionName || '请选择集合' }}</span>
-          <span class="arrow" :class="{ open: addDocCollectionDropdownOpen }">▾</span>
-        </div>
-        <Transition name="select-dropdown">
-          <div v-if="addDocCollectionDropdownOpen" class="select-dropdown">
-            <div v-if="collectionList.length === 0" class="option disabled">暂无集合</div>
-            <div v-for="(c, idx) in collectionList" :key="c.id ?? idx" class="option"
-              :class="{ active: addDocumentForm.collection_name === c.collection_name }"
-              @mousedown.prevent="selectAddDocCollection(c.collection_name ?? '')">{{ c.collection_name }}</div>
+    <template v-if="!addDocumentLoading">
+      <div class="form-item">
+        <label>选择集合 *</label>
+        <div class="custom-select" @blur="closeAddDocCollectionDropdown" tabindex="0">
+          <div class="select-trigger" @click="toggleAddDocCollectionDropdown">
+            <span :class="{ placeholder: !selectedAddDocCollectionName }">{{ selectedAddDocCollectionName || '请选择集合' }}</span>
+            <span class="arrow" :class="{ open: addDocCollectionDropdownOpen }">▾</span>
           </div>
-        </Transition>
-      </div>
-    </div>
-    <div class="form-item">
-      <label>选择文件 *</label>
-      <input ref="fileInputRef" type="file" @change="addDocumentForm.file = ($event.target as HTMLInputElement).files?.[0] || null" hidden />
-      <div class="file-upload-btn" @click="triggerFileInput">
-        <span class="upload-icon">📎</span>
-        <span v-if="addDocumentForm.file">{{ addDocumentForm.file.name }}</span>
-        <span v-else>点击选择文件（最大10MB）</span>
-      </div>
-    </div>
-    <div class="form-item">
-      <label>文档语言</label>
-      <div class="custom-select" @blur="closeAddDocLanguageDropdown" tabindex="0">
-        <div class="select-trigger" @click="toggleAddDocLanguageDropdown">
-          <span>{{ selectedAddDocLanguage || 'English' }}</span>
-          <span class="arrow" :class="{ open: addDocLanguageDropdownOpen }">▾</span>
+          <Transition name="select-dropdown">
+            <div v-if="addDocCollectionDropdownOpen" class="select-dropdown">
+              <div v-if="collectionList.length === 0" class="option disabled">暂无集合</div>
+              <div v-for="(c, idx) in collectionList" :key="c.id ?? idx" class="option"
+                :class="{ active: addDocumentForm.collection_name === c.collection_name }"
+                @mousedown.prevent="selectAddDocCollection(c.collection_name ?? '')">{{ c.collection_name }}</div>
+            </div>
+          </Transition>
         </div>
-        <Transition name="select-dropdown">
-          <div v-if="addDocLanguageDropdownOpen" class="select-dropdown">
-            <div v-for="l in languageList" :key="l.value" class="option"
-              :class="{ active: addDocumentForm.language === l.value }"
-              @mousedown.prevent="selectAddDocLanguage(l.value)">{{ l.label }}</div>
-          </div>
-        </Transition>
       </div>
+      <div class="form-item">
+        <label>选择文件 *</label>
+        <input ref="fileInputRef" type="file" @change="addDocumentForm.file = ($event.target as HTMLInputElement).files?.[0] || null" hidden />
+        <div class="file-upload-btn" @click="triggerFileInput">
+          <span class="upload-icon">📎</span>
+          <span v-if="addDocumentForm.file">{{ addDocumentForm.file.name }}</span>
+          <span v-else>点击选择文件（最大10MB）</span>
+        </div>
+      </div>
+      <div class="form-item">
+        <label>文档语言</label>
+        <div class="custom-select" @blur="closeAddDocLanguageDropdown" tabindex="0">
+          <div class="select-trigger" @click="toggleAddDocLanguageDropdown">
+            <span>{{ selectedAddDocLanguage || 'English' }}</span>
+            <span class="arrow" :class="{ open: addDocLanguageDropdownOpen }">▾</span>
+          </div>
+          <Transition name="select-dropdown">
+            <div v-if="addDocLanguageDropdownOpen" class="select-dropdown">
+              <div v-for="l in languageList" :key="l.value" class="option"
+                :class="{ active: addDocumentForm.language === l.value }"
+                @mousedown.prevent="selectAddDocLanguage(l.value)">{{ l.label }}</div>
+            </div>
+          </Transition>
+        </div>
+      </div>
+    </template>
+    <div v-else class="uploading-status">
+      <div class="uploading-spinner"></div>
+      <span>正在上传文档，请稍候...</span>
     </div>
   </Dialog>
 
@@ -717,6 +751,29 @@ const onConfirmAddDocument = async () => {
 
 .upload-icon {
   font-size: 16px;
+}
+
+.uploading-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 40px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.uploading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(102, 126, 234, 0.15);
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .custom-select {

@@ -62,7 +62,6 @@ const hide = () => {
 
 const handleConfirm = () => {
   emit('confirm');
-  hide();
 };
 
 const handleCancel = () => {

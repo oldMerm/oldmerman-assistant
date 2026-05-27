@@ -444,12 +444,15 @@ const onConfirmAddModel = async () => {
   }
   addModelLoading.value = true
   try {
+    const isDefault = !addModelForm.value.api_key_original ||
+      addModelForm.value.api_key_original === currentGroup.value?.api_key
     const res = await httpInstance.post<any, Response>('/model', {
       model_name: addModelForm.value.model_name,
       group_uuid: currentGroup.value?.group_uuid,
       api_key: addModelForm.value.api_key_original || null,
       base_url: addModelForm.value.base_url || null,
-      type_id: addModelForm.value.type_id
+      type_id: addModelForm.value.type_id,
+      is_default: isDefault
     })
     if (res.code !== 200) {
       showToast(res.message || '添加模型失败!')
