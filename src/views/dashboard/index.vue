@@ -11,10 +11,10 @@ const navItems = ref([
 ])
 
 const sidebarItems = ref([
-  { label: 'Component C1', path: '/dashboard/component1' },
+  { label: '用量统计', path: '/dashboard/usage' },
   { label: '模型注册', path: '/dashboard/model' },
-  { label: '知识库管理', path: '/dashboard/component3' },
-  { label: 'Component C4', path: '/dashboard/component4' },
+  { label: '知识库管理', path: '/dashboard/vector' },
+  { label: '文档管理', path: '/dashboard/document' },
 ])
 // 初始化setting
 const showSettings = ref(false)
@@ -160,12 +160,23 @@ const saveSettings = async () => {
 <style scoped>
 @import url("/src/style/o-topbar1.css");
 
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
 .home-page {
   width: 100%;
-  min-height: 100vh;
+  height: 100vh;
   background: linear-gradient(135deg, #e8f4fc 0%, #d4ecf7 50%, #f0f7fc 100%);
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.home-page::-webkit-scrollbar {
+  display: none;
 }
 
 .dashboard-layout {
@@ -175,42 +186,51 @@ const saveSettings = async () => {
 
 .sidebar {
   width: 200px;
-  background: rgba(249, 249, 249, 0.85);
+  background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(10px);
-  border-right: 1px solid rgba(59, 130, 246, 0.1);
+  border-right: 1px solid rgba(59, 130, 246, 0.08);
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  padding: 16px 0;
+  min-height: calc(100vh - 70px);
+  box-shadow: 1px 0 12px rgba(0,0,0,0.03);
 }
 
 .sidebar-nav {
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  padding: 0 10px;
 }
 
 .sidebar-link {
-  display: block;
-  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  padding: 11px 16px 11px 24px;
   color: #64748b;
   text-decoration: none;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 500;
   border-radius: 8px;
-  transition: all 0.3s ease;
-  padding-left: 28px;
+  transition: background 0.2s ease, color 0.2s ease;
+  position: relative;
 }
 
 .sidebar-link:hover {
-  background: rgba(59, 130, 246, 0.08);
-  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.06);
+  color: #2563eb;
 }
 
 .sidebar-link.router-link-active {
-  background: rgba(59, 130, 246, 0.12);
-  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
 }
 
 .dashboard-content {
   flex: 1;
-  overflow-y: auto;
+  padding: 12px;
   background: linear-gradient(135deg, #e8f4fc 0%, #d4ecf7 50%, #f0f7fc 100%);
 }
 

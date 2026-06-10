@@ -20,10 +20,10 @@ const router = createRouter({
       path: '/dashboard',
       name: 'dashboard',
       component: DashboardPage,
-      redirect: '/dashboard/component1',
+      redirect: '/dashboard/usage',
       children: [
         {
-          path: 'component1',
+          path: 'usage',
           name: 'dashboard-component1',
           component: () => import('@/views/dashboard/components/Component1.vue')
         },
@@ -33,12 +33,12 @@ const router = createRouter({
           component: () => import('@/views/dashboard/components/Component2.vue')
         },
         {
-          path: 'component3',
+          path: 'vector',
           name: 'dashboard-component3',
           component: () => import('@/views/dashboard/components/Component3.vue')
         },
         {
-          path: 'component4',
+          path: 'document',
           name: 'dashboard-component4',
           component: () => import('@/views/dashboard/components/Component4.vue')
         }

@@ -556,7 +556,8 @@ const deleteModelApi = async (typeId: number, modelId: number) => {
       </div>
 
       <div class="categories-grid">
-        <div v-for="category in currentCategories" :key="category.type_id" class="category-card">
+        <div v-for="(category, index) in currentCategories" :key="category.type_id" class="category-card"
+          :style="{ animationDelay: `${index * 0.08}s` }">
           <div class="category-header">{{ category.type_name }}</div>
           <div class="model-list">
             <div class="model-column" v-for="col in 2" :key="col">
@@ -674,7 +675,6 @@ const deleteModelApi = async (typeId: number, modelId: number) => {
   background: rgba(249, 249, 249, 0.85);
   border-radius: 12px;
   padding: 24px;
-  margin: 16px;
   min-height: calc(100% - 32px);
 }
 
@@ -907,6 +907,7 @@ const deleteModelApi = async (typeId: number, modelId: number) => {
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(0, 0, 0, 0.06);
   transition: all 0.3s ease;
+  animation: cardIn 0.4s ease-out both;
 }
 
 .category-card:hover {
@@ -1145,6 +1146,18 @@ const deleteModelApi = async (typeId: number, modelId: number) => {
   from {
     opacity: 0;
     transform: translateY(-8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Card entrance animation */
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
   }
   to {
     opacity: 1;

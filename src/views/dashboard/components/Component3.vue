@@ -7,6 +7,7 @@ import Dialog from '@/utils/dialog/Dialog.vue'
 interface VectorCollection {
   id?: number
   embedding_id?: number | null
+  embedding_name?: string | null
   collection_name?: string | null
   collection_alias?: string | null
   collection_description?: string | null
@@ -348,7 +349,8 @@ const onConfirmAddDocument = async () => {
       </div>
 
       <div class="collections-grid" v-if="collectionList.length > 0">
-        <div v-for="collection in collectionList" :key="collection.id" class="collection-card">
+        <div v-for="(collection, index) in collectionList" :key="collection.id" class="collection-card"
+          :style="{ animationDelay: `${index * 0.06}s` }">
           <div class="card-header">
             <div class="collection-title">
               <span class="name">{{ collection.collection_name || '未命名' }}</span>
@@ -363,7 +365,7 @@ const onConfirmAddDocument = async () => {
               <span class="meta-item">📄 {{ collection.items_number ?? 0 }} 条文档</span>
               <span class="meta-item">📅 {{ formatDate(collection.created_at) }}</span>
               <span class="meta-item">📚 {{ collection.dimensions }}</span>
-              <span class="meta-item">🤖 {{ collection.embedding_id || 'default_embedding' }}</span>
+              <span class="meta-item">🤖 {{ collection.embedding_name || 'default_embedding' }}</span>
             </div>
           </div>
           <div class="card-footer">
@@ -485,7 +487,6 @@ const onConfirmAddDocument = async () => {
   background: rgba(249, 249, 249, 0.85);
   border-radius: 12px;
   padding: 24px;
-  margin: 16px;
   min-height: calc(100% - 32px);
 }
 
@@ -572,6 +573,7 @@ const onConfirmAddDocument = async () => {
   display: flex;
   flex-direction: column;
   min-height: 180px;
+  animation: cardIn 0.4s ease-out both;
 }
 
 .collection-card:hover {
@@ -774,6 +776,17 @@ const onConfirmAddDocument = async () => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .custom-select {
