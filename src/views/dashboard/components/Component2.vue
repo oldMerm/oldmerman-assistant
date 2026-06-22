@@ -573,7 +573,7 @@ const deleteModelApi = async (typeId: number, modelId: number) => {
 
       <Transition name="fade">
         <div v-if="!isScrolling" class="footer-tips">
-          点击模型名称后的×可删除该模型
+          注意事项：尽量同步提供商的api-key，方便管理
         </div>
       </Transition>
     </template>
@@ -674,8 +674,11 @@ const deleteModelApi = async (typeId: number, modelId: number) => {
 .component2-container {
   background: rgba(249, 249, 249, 0.85);
   border-radius: 12px;
-  padding: 24px;
-  min-height: calc(100% - 32px);
+  padding: 24px 24px 24px;
+  min-height: calc(100%);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
 
 .loading-state {
@@ -989,6 +992,7 @@ const deleteModelApi = async (typeId: number, modelId: number) => {
   padding-top: 16px;
   border-top: 1px solid #eee;
   font-style: italic;
+  margin-top: auto;
 }
 
 .dropdown-enter-active,

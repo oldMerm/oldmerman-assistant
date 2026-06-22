@@ -487,7 +487,10 @@ const onConfirmAddDocument = async () => {
   background: rgba(249, 249, 249, 0.85);
   border-radius: 12px;
   padding: 24px;
-  min-height: calc(100% - 32px);
+  min-height: calc(100%);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
 
 .loading-state,
@@ -645,7 +648,7 @@ const onConfirmAddDocument = async () => {
 
 .collection-meta {
   display: flex;
-  gap: 16px;
+  gap: 6px;
   color: #888;
   font-size: 12px;
   flex-wrap: wrap;
@@ -897,6 +900,6 @@ const onConfirmAddDocument = async () => {
   padding-top: 16px;
   border-top: 1px solid #eee;
   font-style: italic;
-  margin-top: 24px;
+  margin-top: auto;
 }
 </style>

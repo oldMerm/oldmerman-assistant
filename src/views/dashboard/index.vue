@@ -161,8 +161,7 @@ const saveSettings = async () => {
 @import url("/src/style/o-topbar1.css");
 
 .topbar {
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
   z-index: 100;
 }
 
@@ -171,17 +170,16 @@ const saveSettings = async () => {
   height: 100vh;
   background: linear-gradient(135deg, #e8f4fc 0%, #d4ecf7 50%, #f0f7fc 100%);
   position: relative;
-  overflow-y: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.home-page::-webkit-scrollbar {
-  display: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .dashboard-layout {
   display: flex;
-  min-height: calc(100vh - 70px);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar {
@@ -193,8 +191,10 @@ const saveSettings = async () => {
   position: sticky;
   top: 0;
   align-self: flex-start;
+  height: 100%;
+  min-height: 100%;
+  overflow-y: auto;
   padding: 16px 0;
-  min-height: calc(100vh - 70px);
   box-shadow: 1px 0 12px rgba(0,0,0,0.03);
 }
 
@@ -230,8 +230,15 @@ const saveSettings = async () => {
 
 .dashboard-content {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   padding: 12px;
   background: linear-gradient(135deg, #e8f4fc 0%, #d4ecf7 50%, #f0f7fc 100%);
+}
+.dashboard-content::-webkit-scrollbar {
+  display: none;
 }
 
 .modal-overlay {

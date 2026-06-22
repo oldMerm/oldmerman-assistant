@@ -36,15 +36,22 @@ const deleteDialogVisible = ref(false)
 const deletingDoc = ref<DocumentItem | null>(null)
 const deleting = ref(false)
 
+const collections = ref<string[]>([])
+const selectedCollection = ref('')
+const showCollectionDropdown = ref(false)
+const loadingCollections = ref(false)
+
 const totalText = computed(() => `共 ${totalDocs.value} 个文档`)
 const pageInfoText = computed(() => `第 ${currentPage.value}/${totalPages.value} 页`)
 
-const fetchDocuments = async (page: number) => {
+const fetchDocuments = async (page: number, collectionName?: string) => {
   loading.value = true
   try {
-    const res = await httpInstance.get<any, Response>('/document', {
-      params: { current: page, size: pageSize.value }
-    })
+    const params: Record<string, any> = { current: page, size: pageSize.value }
+    if (collectionName || selectedCollection.value) {
+      params.collection_name = collectionName || selectedCollection.value
+    }
+    const res = await httpInstance.get<any, Response>('/document', { params })
     if (res.code !== 200) {
       showToast('error', res.message || '获取文档列表失败')
       return
@@ -59,6 +66,31 @@ const fetchDocuments = async (page: number) => {
   } finally {
     loading.value = false
   }
+}
+
+const fetchCollections = async () => {
+  loadingCollections.value = true
+  try {
+    const res = await httpInstance.get<any, Response>('/vector-manage/list')
+    if (res.code === 200) {
+      collections.value = res.data || []
+    }
+  } catch {
+    // silently fail
+  } finally {
+    loadingCollections.value = false
+  }
+}
+
+const selectCollection = (name: string) => {
+  showCollectionDropdown.value = false
+  selectedCollection.value = name
+  fetchDocuments(1, name)
+}
+
+const clearCollection = () => {
+  selectedCollection.value = ''
+  fetchDocuments(1)
 }
 
 const showToast = (type: 'success' | 'error', msg: string) => {
@@ -145,6 +177,7 @@ const pageNumbers = computed(() => {
 
 onMounted(() => {
   fetchDocuments(1)
+  fetchCollections()
 })
 </script>
 
@@ -164,6 +197,43 @@ onMounted(() => {
       <div class="header-left">
         <h2 class="header-title">文档管理</h2>
         <span class="header-count">{{ totalText }}</span>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <div class="filter-group">
+        <span class="filter-label">集合筛选</span>
+        <div class="collection-select" @click="showCollectionDropdown = !showCollectionDropdown">
+          <span class="select-trigger">
+            <span v-if="selectedCollection" class="select-value">{{ selectedCollection }}</span>
+            <span v-else class="select-placeholder">全部集合</span>
+          </span>
+          <span class="select-arrow" :class="{ open: showCollectionDropdown }">▼</span>
+        </div>
+        <Transition name="dropdown">
+          <div v-if="showCollectionDropdown" class="collection-dropdown">
+            <div
+              class="dropdown-item"
+              :class="{ active: !selectedCollection }"
+              @click="clearCollection"
+            >
+              全部集合
+            </div>
+            <div
+              v-for="name in collections"
+              :key="name"
+              class="dropdown-item"
+              :class="{ active: selectedCollection === name }"
+              @click="selectCollection(name)"
+            >
+              {{ name }}
+            </div>
+            <div v-if="loadingCollections" class="dropdown-loading">加载中...</div>
+          </div>
+        </Transition>
+      </div>
+      <div class="filter-reserved">
+        <span class="reserved-hint">更多筛选条件</span>
       </div>
     </div>
 
@@ -191,35 +261,31 @@ onMounted(() => {
           </div>
           <div class="card-meta">
             <div class="meta-row">
-              <span class="meta-label">文件大小</span>
+              <span class="meta-label">大小</span>
               <span class="meta-value">{{ formatSize(doc.filesize) }}</span>
             </div>
             <div class="meta-row">
-              <span class="meta-label">所属集合</span>
+              <span class="meta-label">集合</span>
               <span class="meta-value">{{ doc.collection_name }}</span>
             </div>
             <div class="meta-row">
-              <span class="meta-label">分块数量</span>
+              <span class="meta-label">分块</span>
               <span class="meta-value">{{ doc.doc_num }} 块</span>
             </div>
             <div class="meta-row">
-              <span class="meta-label">创建时间</span>
+              <span class="meta-label">时间</span>
               <span class="meta-value">{{ formatDate(doc.created_at) }}</span>
             </div>
           </div>
           <div class="card-actions">
-            <button class="btn-delete" @click="confirmDelete(doc)">
-              <span class="delete-icon">🗑</span>
-              删除
-            </button>
+            <button class="btn-delete" @click="confirmDelete(doc)">删除</button>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="doc-tips">
-      <span class="tips-icon">ℹ</span>
-      <span>文档被删除后不可恢复，请谨慎操作</span>
+    <div class="footer-tips">
+      文档被删除后不可恢复，请谨慎操作
     </div>
 
     <div class="doc-footer">
@@ -272,7 +338,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 .header-left {
@@ -283,9 +349,11 @@ onMounted(() => {
 
 .header-title {
   margin: 0;
+  font-family: 'Outfit', sans-serif;
   font-size: 22px;
   font-weight: 700;
   color: #1a1a2e;
+  letter-spacing: -0.3px;
 }
 
 .header-count {
@@ -294,12 +362,138 @@ onMounted(() => {
   font-weight: 400;
 }
 
+/* Filter Bar */
+.filter-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.08);
+}
+
+.filter-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.collection-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #333;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  min-width: 140px;
+  user-select: none;
+}
+
+.collection-select:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.06);
+}
+
+.select-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.select-value {
+  color: #2563eb;
+  font-weight: 500;
+}
+
+.select-placeholder {
+  color: #94a3b8;
+}
+
+.select-arrow {
+  font-size: 10px;
+  color: #94a3b8;
+  transition: transform 0.2s ease;
+}
+
+.select-arrow.open {
+  transform: rotate(180deg);
+}
+
+.collection-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 52px;
+  z-index: 100;
+  background: #fff;
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  border-radius: 8px;
+  min-width: 160px;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.12);
+  animation: dropdownIn 0.2s ease-out;
+}
+
+.dropdown-item {
+  padding: 9px 14px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.dropdown-item:hover {
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.dropdown-item.active {
+  color: #2563eb;
+  font-weight: 600;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.dropdown-loading {
+  padding: 9px 14px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+/* Reserved space for future filters */
+.filter-reserved {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+}
+
+.reserved-hint {
+  font-size: 12px;
+  color: #cbd5e1;
+  font-style: italic;
+  letter-spacing: 0.3px;
+}
+
+/* Body */
 .doc-body {
   flex: 1;
   min-height: 0;
 }
 
-/* Loading & Empty */
 .loading-state,
 .empty-state {
   display: flex;
@@ -315,8 +509,8 @@ onMounted(() => {
 .spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(102, 126, 234, 0.15);
-  border-top-color: #667eea;
+  border: 3px solid rgba(59, 130, 246, 0.12);
+  border-top-color: #3b82f6;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -325,22 +519,22 @@ onMounted(() => {
   font-size: 28px;
 }
 
-/* Grid: 4 columns × 2 rows = 8 cards */
+/* Grid: 5 columns × 2 rows = 10 cards */
 .doc-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   grid-template-rows: 1fr 1fr;
-  gap: 14px;
+  gap: 12px;
   height: 100%;
 }
 
-/* Card */
+/* Card - Light Blue Theme */
 .doc-card {
-  background: #fff;
+  background: linear-gradient(135deg, #f8fbff 0%, #f0f7fe 100%);
   border-radius: 10px;
-  padding: 12px 16px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.05);
+  padding: 10px 13px;
+  border: 1px solid rgba(59, 130, 246, 0.1);
+  box-shadow: 0 1px 4px rgba(59, 130, 246, 0.06);
   transition: all 0.25s ease;
   display: flex;
   flex-direction: column;
@@ -351,20 +545,21 @@ onMounted(() => {
 
 .doc-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.09);
+  border-color: rgba(59, 130, 246, 0.25);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.1);
 }
 
 .card-top {
-  margin-bottom: 6px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 5px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.08);
 }
 
 .card-filename {
   position: relative;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #1e3a5f;
   line-height: 1.3;
 }
 
@@ -383,14 +578,14 @@ onMounted(() => {
   z-index: 10;
   font-size: 12px;
   font-weight: 400;
-  color: #555;
+  color: #475569;
   background: #fff;
   padding: 4px 8px;
   border-radius: 5px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.1);
   white-space: nowrap;
-  max-width: 280px;
+  max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: none;
@@ -404,26 +599,27 @@ onMounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   justify-content: flex-start;
 }
 
 .meta-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .meta-label {
-  font-size: 12px;
-  color: #999;
-  min-width: 30px;
+  font-size: 11px;
+  color: #94a3b8;
+  min-width: 24px;
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 .meta-value {
-  font-size: 13px;
-  color: #333;
+  font-size: 12px;
+  color: #334155;
   font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -431,55 +627,44 @@ onMounted(() => {
 }
 
 .card-actions {
-  padding-top: 6px;
-  border-top: 1px solid #f0f0f0;
+  padding-top: 5px;
+  border-top: 1px solid rgba(59, 130, 246, 0.08);
   margin-top: auto;
 }
 
 .btn-delete {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 12px;
+  gap: 4px;
+  padding: 4px 10px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   border: none;
-  background: rgba(239, 68, 68, 0.08);
+  background: rgba(239, 68, 68, 0.06);
   color: #ef4444;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .btn-delete:hover {
-  background: rgba(239, 68, 68, 0.16);
-}
-
-.delete-icon {
-  font-size: 11px;
+  background: rgba(239, 68, 68, 0.14);
 }
 
 /* Tips */
-.doc-tips {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 0 2px;
-  font-size: 11px;
+.footer-tips {
+  font-size: 13px;
   color: #999;
-}
-
-.tips-icon {
-  font-size: 12px;
-  opacity: 0.7;
+  padding-top: 14px;
+  font-style: italic;
+  margin-top: auto;
 }
 
 /* Footer / Pagination */
 .doc-footer {
   flex-shrink: 0;
   padding: 8px 0 4px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-top: 1px solid rgba(59, 130, 246, 0.08);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -505,10 +690,10 @@ onMounted(() => {
   min-width: 30px;
   height: 30px;
   padding: 0 8px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.12);
   border-radius: 6px;
   background: #fff;
-  color: #333;
+  color: #475569;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -519,9 +704,9 @@ onMounted(() => {
 }
 
 .page-btn:hover:not(:disabled):not(.active) {
-  border-color: #667eea;
-  color: #667eea;
-  background: rgba(102, 126, 234, 0.04);
+  border-color: #3b82f6;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.04);
 }
 
 .page-btn.active {
@@ -555,7 +740,26 @@ onMounted(() => {
   }
 }
 
+@keyframes dropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Dropdown transition */
+.dropdown-enter-active {
+  animation: dropdownIn 0.2s ease-out;
+}
+.dropdown-leave-active {
+  animation: dropdownIn 0.15s ease-in reverse;
 }
 </style>

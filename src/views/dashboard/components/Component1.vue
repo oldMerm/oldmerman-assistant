@@ -502,7 +502,7 @@ onMounted(() => {
 
 .usage-title {
   font-family: 'Outfit', sans-serif;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   color: #1a1a2e;
   margin: 0;
@@ -663,13 +663,13 @@ onMounted(() => {
 
 .y-label {
   fill: #94a3b8;
-  font-size: 10px;
+  font-size: 14px;
   font-family: 'JetBrains Mono', monospace;
 }
 
 .x-label {
   fill: #64748b;
-  font-size: 11px;
+  font-size: 15px;
   font-family: 'Outfit', sans-serif;
   font-weight: 500;
 }
