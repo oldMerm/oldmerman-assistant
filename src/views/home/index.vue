@@ -2,11 +2,19 @@
 import { ref } from 'vue'
 import router from '@/router'
 import { httpInstance, type Response } from '@/utils/http'
+import ChatCard from './components/ChatCard/index.vue'
 
 const navItems = ref([
   { label: '文档', href: 'https://oldmerman.cn' },
   { label: 'GitHub', href: 'https://github.com/oldMerm' },
 ])
+
+const chatVisible = ref(false)
+const chatCardRef = ref<InstanceType<typeof ChatCard> | null>(null)
+
+const startChat = () => {
+  chatVisible.value = true
+}
 
 function getParticleStyle(index: number) {
   let left: number, top: number
@@ -57,12 +65,14 @@ const goToDashboard = async() => {
         <h1 class="title">老鱼人知识库</h1>
         <p class="subtitle">轻松搭建个人知识库，让信息有序流转！</p>
         <div class="buttons">
-          <button class="btn btn-primary">开始对话</button>
+          <button class="btn btn-primary" @click="startChat">开始对话</button>
           <button class="btn btn-secondary" @click="goToDashboard">控制面板</button>
         </div>
       </div>
       <p class="footer-tip">请注意保护个人隐私</p>
     </main>
+
+    <ChatCard v-model:visible="chatVisible" ref="chatCardRef" />
   </div>
 </template>
 
