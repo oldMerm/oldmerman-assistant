@@ -74,21 +74,11 @@
                 </div>
                 <div class="message-content">
                   <div v-if="msg.role === 'user'" class="content-text">{{ msg.content }}</div>
-                  <div v-else class="content-markdown" v-html="mdToHtml(msg.content)"></div>
+                  <div v-else-if="msg.content" class="content-markdown" v-html="mdToHtml(msg.content)"></div>
+                  <span v-else-if="idx === messages.length - 1 && isLoading" class="typing-dots"><span>.</span><span>.</span><span>.</span></span>
                 </div>
               </div>
-              <div v-if="isLoading" class="message ai">
-                <div class="message-avatar">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                    <path d="M2 17l10 5 10-5" />
-                    <path d="M2 12l10 5 10-5" />
-                  </svg>
-                </div>
-                <div class="message-content">
-                  <span class="typing-dots"><span>.</span><span>.</span><span>.</span></span>
-                </div>
-              </div>
+
             </div>
           </div>
 
@@ -156,6 +146,16 @@ const chatContainer = ref<HTMLElement | null>(null)
 const abortController = ref<AbortController | null>(null)
 const refreshSpinning = ref(false)
 const closeSpinning = ref(false)
+
+const generateSign = () => {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return result
+}
+const sign = ref(generateSign())
 
 watch(() => props.visible, (val) => {
   localVisible.value = val
@@ -233,6 +233,7 @@ const sendMessage = async () => {
     const body: Record<string, string> = {
       user_prompt: text,
       collection_name: props.collectionName,
+      sign: sign.value,
     }
     if (selectedModel.value) {
       body.model_id = String(selectedModel.value.model_id)
@@ -297,6 +298,7 @@ const handleKeydown = (e: KeyboardEvent) => {
 const refresh = () => {
   refreshSpinning.value = true
   messages.value = []
+  sign.value = generateSign()
   setTimeout(() => {
     refreshSpinning.value = false
   }, 600)
@@ -485,7 +487,7 @@ function escapeHtml(str: string): string {
   border: 1px solid rgba(59, 130, 246, 0.12);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  min-width: 200px;
+  min-width: 160px;
   max-height: 240px;
   overflow-y: auto;
   z-index: 100;

@@ -140,6 +140,105 @@ const goToPage = (page: number) => {
   fetchDocuments(page)
 }
 
+interface RerankModel {
+  model_id: number
+  model_name: string
+  model_group_name?: string
+}
+
+const rerankEnabled = ref(false)
+const rerankModelName = ref('')
+const rerankLoading = ref(false)
+const rerankModels = ref<RerankModel[]>([])
+const showRerankDialog = ref(false)
+const rerankDialogMode = ref<'select-model' | 'confirm-enable' | 'confirm-disable'>('select-model')
+const selectedRerankModel = ref<RerankModel | null>(null)
+const rerankConfirming = ref(false)
+
+const fetchRerankStatus = async () => {
+  try {
+    const res = await httpInstance.get<any, Response>('/system_config/rerank')
+    if (res.code === 200 && res.data) {
+      rerankEnabled.value = !!res.data['rerank.enabled']
+      rerankModelName.value = rerankEnabled.value ? (res.data.model || '') : ''
+    }
+  } catch {
+    // silently fail
+  }
+}
+
+const fetchRerankModels = async () => {
+  try {
+    const res = await httpInstance.get<any, Response>('/model_type/vector-models', {
+      params: { type_name: '重排序模型' }
+    })
+    if (res.code === 200 && res.data?.models) {
+      rerankModels.value = res.data.models
+    }
+  } catch {
+    rerankModels.value = []
+  }
+}
+
+const onRerankClick = async () => {
+  if (rerankEnabled.value) {
+    rerankDialogMode.value = 'confirm-disable'
+    showRerankDialog.value = true
+  } else {
+    rerankDialogMode.value = 'select-model'
+    showRerankDialog.value = true
+    await fetchRerankModels()
+  }
+}
+
+const onRerankModelSelect = (model: RerankModel) => {
+  selectedRerankModel.value = model
+  rerankDialogMode.value = 'confirm-enable'
+}
+
+const onRerankConfirm = async () => {
+  rerankConfirming.value = true
+  try {
+    if (rerankDialogMode.value === 'confirm-enable') {
+      if (!selectedRerankModel.value) return
+      const res = await httpInstance.post<any, Response>('/system_config/rerank', {
+        model_id: selectedRerankModel.value.model_id,
+        is_enabled: true
+      })
+      if (res.code !== 200) {
+        showToast('error', res.message || '开启重排序失败')
+        return
+      }
+      showToast('success', '重排序已开启')
+      rerankEnabled.value = true
+      rerankModelName.value = selectedRerankModel.value.model_name
+    } else if (rerankDialogMode.value === 'confirm-disable') {
+      const res = await httpInstance.post<any, Response>('/system_config/rerank', {
+        is_enabled: false,
+        model_id: null
+      })
+      if (res.code !== 200) {
+        showToast('error', res.message || '关闭重排序失败')
+        return
+      }
+      showToast('success', '重排序已关闭')
+      rerankEnabled.value = false
+      rerankModelName.value = ''
+    }
+    showRerankDialog.value = false
+  } catch (error) {
+    showToast('error', `操作失败: ${error}`)
+  } finally {
+    rerankConfirming.value = false
+  }
+}
+
+const onRerankCancel = () => {
+  showRerankDialog.value = false
+  selectedRerankModel.value = null
+  rerankModels.value = []
+}
+
 const formatSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -178,6 +277,7 @@ const pageNumbers = computed(() => {
 onMounted(() => {
   fetchDocuments(1)
   fetchCollections()
+  fetchRerankStatus()
 })
 </script>
 
@@ -193,10 +293,48 @@ onMounted(() => {
       :confirm-loading="deleting"
     />
 
+    <Dialog
+      v-model:visible="showRerankDialog"
+      :title="rerankDialogMode === 'confirm-disable' ? '关闭重排序' : rerankDialogMode === 'confirm-enable' ? '开启重排序' : '选择重排序模型'"
+      @confirm="onRerankConfirm"
+      @cancel="onRerankCancel"
+      :confirm-loading="rerankConfirming"
+    >
+      <template v-if="rerankDialogMode === 'select-model'">
+        <div class="rerank-model-list">
+          <div
+            v-for="model in rerankModels"
+            :key="model.model_id"
+            class="rerank-model-item"
+            :class="{ selected: selectedRerankModel?.model_id === model.model_id }"
+            @click="onRerankModelSelect(model)"
+          >
+            <span class="model-name">{{ model.model_name }}</span>
+            <span v-if="model.model_group_name" class="model-group">{{ model.model_group_name }}</span>
+          </div>
+          <div v-if="rerankModels.length === 0" class="rerank-model-empty">
+            <span>暂无可选模型</span>
+          </div>
+        </div>
+      </template>
+      <template v-else-if="rerankDialogMode === 'confirm-enable'">
+        <p class="rerank-confirm-text">确定使用「{{ selectedRerankModel?.model_name }}」模型开启文档重排序吗？</p>
+      </template>
+      <template v-else>
+        <p class="rerank-confirm-text">确定要关闭文档重排序功能吗？</p>
+      </template>
+    </Dialog>
+
     <div class="doc-header">
       <div class="header-left">
         <h2 class="header-title">文档管理</h2>
         <span class="header-count">{{ totalText }}</span>
+      </div>
+      <div class="header-right">
+        <button class="rerank-btn" @click="onRerankClick">
+          <span class="rerank-label">文档重排序</span>
+          <span class="rerank-value">{{ rerankEnabled && rerankModelName ? rerankModelName : '未开启' }}</span>
+        </button>
       </div>
     </div>
 
@@ -360,6 +498,47 @@ onMounted(() => {
   font-size: 13px;
   color: #888;
   font-weight: 400;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+}
+
+.rerank-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 16px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f0f7ff 0%, #e8f0fe 100%);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  user-select: none;
+  font-family: inherit;
+  line-height: 1.2;
+}
+
+.rerank-btn:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+  transform: translateY(-1px);
+}
+
+.rerank-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e3a5f;
+  white-space: nowrap;
+}
+
+.rerank-value {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
 }
 
 /* Filter Bar */
@@ -753,6 +932,62 @@ onMounted(() => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Rerank Model List */
+.rerank-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.rerank-model-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(59, 130, 246, 0.1);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: #fff;
+}
+
+.rerank-model-item:hover {
+  background: rgba(59, 130, 246, 0.04);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.rerank-model-item.selected {
+  background: rgba(59, 130, 246, 0.06);
+  border-color: #3b82f6;
+}
+
+.model-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e3a5f;
+}
+
+.model-group {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.rerank-model-empty {
+  text-align: center;
+  padding: 20px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.rerank-confirm-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #4a5568;
 }
 
 /* Dropdown transition */
